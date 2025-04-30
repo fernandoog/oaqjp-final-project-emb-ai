@@ -1,38 +1,34 @@
+"""
+Flask server for the Emotion Detection API
+"""
+
+from flask import Flask, request, jsonify
 import requests
+from EmotionDetection.emotion_detection import emotion_detector
 
-def emotion_detector(text_to_analyze):
-    if not text_to_analyze.strip():  # Check if text is empty or just spaces
-        return {
-            "anger": None,
-            "disgust": None,
-            "fear": None,
-            "joy": None,
-            "sadness": None,
-            "dominant_emotion": None
-        }
+app = Flask(__name__)
 
-    url = "https://sn-watson-emotion.labs.skills.network/v1/watson.runtime.nlp.v1/NlpService/EmotionPredict"
-    headers = {"grpc-metadata-mm-model-id": "emotion_aggregated-workflow_lang_en_stock"}
-    payload = { "raw_document": { "text": text_to_analyze } }
+@app.route("/emotionDetector", methods=["POST"])
+def detect_emotion():
+    """
+    Processes input text and returns detected emotions.
+    """
+    data = request.json
+    text_to_analyze = data.get("text", "").strip()
 
-    response = requests.post(url, headers=headers, json=payload)
+    result = emotion_detector(text_to_analyze)
 
-    if response.status_code == 400:
-        return {
-            "anger": None,
-            "disgust": None,
-            "fear": None,
-            "joy": None,
-            "sadness": None,
-            "dominant_emotion": None
-        }
+    if result["dominant_emotion"] is None:
+        return jsonify({"error": "Invalid text! Please try again."}), 400
 
-    if response.status_code == 200:
-        emotions_data = response.json()
-        emotions = emotions_data.get("emotion_predictions", [{}])[0].get("emotion", {})
-        relevant_emotions = {key: emotions.get(key, 0) for key in ["anger", "disgust", "fear", "joy", "sadness"]}
-        dominant_emotion = max(relevant_emotions, key=relevant_emotions.get)
-        relevant_emotions["dominant_emotion"] = dominant_emotion
-        return relevant_emotions
+    response_message = (
+        f"For the given statement, the system response is "
+        f"'anger': {result['anger']}, 'disgust': {result['disgust']}, "
+        f"'fear': {result['fear']}, 'joy': {result['joy']} and "
+        f"'sadness': {result['sadness']}. The dominant emotion is {result['dominant_emotion']}."
+    )
 
-    return {"error": f"Request failed with status code {response.status_code}"}
+    return jsonify({"analysis": result, "message": response_message})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
